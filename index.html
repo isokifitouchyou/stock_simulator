@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Cartera y Simulador</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .loader {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3b82f6;
+            border-radius: 50%;
+            width: 14px;
+            height: 14px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        /* Scrollbar styling para la tabla */
+        ::-webkit-scrollbar { height: 8px; width: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto space-y-8">
+        
+        <header class="text-center md:text-left flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-white mb-1">💼 Mi Cartera & Simulador</h1>
+                <p class="text-slate-400 text-sm">Gestiona tus posiciones y simula aportaciones extra.</p>
+            </div>
+            <!-- Resumen Global -->
+            <div class="flex gap-4 bg-slate-800 p-3 rounded-xl border border-slate-700">
+                <div class="text-center">
+                    <p class="text-xs text-slate-400">Invertido Total</p>
+                    <p class="font-bold text-slate-200" id="globalInvested">$0.00</p>
+                </div>
+                <div class="w-px bg-slate-700"></div>
+                <div class="text-center">
+                    <p class="text-xs text-slate-400">Valor Actual</p>
+                    <p class="font-bold text-slate-200" id="globalValue">$0.00</p>
+                </div>
+                <div class="w-px bg-slate-700"></div>
+                <div class="text-center">
+                    <p class="text-xs text-slate-400">P/L Total</p>
+                    <p class="font-bold" id="globalProfit">$0.00</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- SECCIÓN 1: LA CARTERA -->
+        <div class="bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                <h2 class="text-xl font-semibold text-blue-400">Tus Posiciones</h2>
+                
+                <!-- Formulario para añadir nueva posición -->
+                <form id="addPositionForm" class="flex flex-wrap items-end gap-3 bg-slate-900 p-3 rounded-lg border border-slate-700 w-full md:w-auto">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Ticker</label>
+                        <input type="text" id="newTicker" placeholder="AAPL" class="w-20 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-white uppercase focus:outline-none focus:border-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Pr. Medio ($)</label>
+                        <input type="number" id="newBuyPrice" placeholder="150" step="any" class="w-24 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-blue-500" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Invertido ($)</label>
+                        <input type="number" id="newInvested" placeholder="1000" step="any" class="w-24 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-blue-500" required>
+                    </div>
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded text-sm transition-colors font-medium h-[30px]">
+                        + Añadir
+                    </button>
+                </form>
+            </div>
+
+            <!-- Tabla de posiciones -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm whitespace-nowrap">
+                    <thead class="text-xs text-slate-400 uppercase bg-slate-900/50 border-b border-slate-700">
+                        <tr>
+                            <th class="px-4 py-3">Ticker</th>
+                            <th class="px-4 py-3">Pr. Medio</th>
+                            <th class="px-4 py-3">Invertido</th>
+                            <th class="px-4 py-3">Pr. Actual (Manual o Auto)</th>
+                            <th class="px-4 py-3">Valor Actual</th>
+                            <th class="px-4 py-3">P/L</th>
+                            <th class="px-4 py-3 text-right">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="portfolioBody" class="divide-y divide-slate-700">
+                        <!-- Las filas se generan con JS -->
+                    </tbody>
+                </table>
+                <div id="emptyState" class="text-center py-8 text-slate-500 hidden">
+                    Aún no tienes posiciones. Añade una arriba.
+                </div>
+            </div>
+        </div>
+
+        <!-- SECCIÓN 2: EL SIMULADOR (Similar al anterior pero se auto-rellena) -->
+        <div id="simulatorSection" class="grid grid-cols-1 lg:grid-cols-12 gap-6 opacity-50 pointer-events-none transition-opacity duration-300">
+            
+            <div class="lg:col-span-4 bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700">
+                <h2 class="text-xl font-semibold mb-2 text-emerald-400 flex items-center gap-2">
+                    <span id="simBadge" class="bg-emerald-900 text-emerald-300 text-xs px-2 py-1 rounded-full hidden"></span>
+                    Simulador
+                </h2>
+                <p class="text-xs text-slate-400 mb-6">Selecciona "Simular" en una acción de tu cartera para activar esto.</p>
+                
+                <form id="simForm" class="space-y-4">
+                    <!-- Campos ocultos de los datos base -->
+                    <input type="hidden" id="simBuyPrice">
+                    <input type="hidden" id="simInvested">
+                    <input type="hidden" id="simCurrentPrice">
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-1">Añadir Capital ($)</label>
+                            <input type="number" id="addAmount" value="100" step="any" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-1">Precio Objetivo ($)</label>
+                            <input type="number" id="targetPrice" value="" step="any" placeholder="Ej: 250" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500" required>
+                        </div>
+                    </div>
+
+                    <button type="button" onclick="calcularSimulacion()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-lg mt-4 transition-colors shadow-lg">
+                        Calcular Impacto
+                    </button>
+                </form>
+            </div>
+
+            <!-- Panel de Resultados del Simulador -->
+            <div class="lg:col-span-8 bg-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700 relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+                <h3 class="text-lg font-medium text-slate-300 border-b border-slate-700 pb-2 mb-4">Si el precio llega a $<span id="lblTargetPrice">...</span></h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Escenario 1 -->
+                    <div class="bg-slate-900 p-4 rounded-xl border border-slate-700">
+                        <h4 class="text-red-400 font-medium mb-3 flex items-center gap-2">⛔ No añades nada</h4>
+                        <div class="space-y-2">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-400">Valor Final:</span>
+                                <span class="font-medium" id="scen1Value">$0.00</span>
+                            </div>
+                            <div class="flex justify-between text-sm border-t border-slate-700 pt-2">
+                                <span class="text-slate-300 font-semibold">Ganancia Neta:</span>
+                                <span class="font-bold text-emerald-400" id="scen1Profit">$0.00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Escenario 2 -->
+                    <div class="bg-slate-900 p-4 rounded-xl border border-emerald-900/50">
+                        <h4 class="text-emerald-400 font-medium mb-3 flex items-center gap-2">💸 Añadiendo $<span id="lblAddAmount">...</span> hoy</h4>
+                        <div class="space-y-2">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-400">Nuevo Pr. Medio:</span>
+                                <span class="font-medium" id="scen2AvgPrice">$0.00</span>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-400">Valor Final:</span>
+                                <span class="font-medium" id="scen2Value">$0.00</span>
+                            </div>
+                            <div class="flex justify-between text-sm border-t border-slate-700 pt-2">
+                                <span class="text-slate-300 font-semibold">Ganancia Neta:</span>
+                                <span class="font-bold text-emerald-400" id="scen2Profit">$0.00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 bg-blue-900/30 border border-blue-800 p-4 rounded-xl text-center">
+                    <p class="text-slate-300 mb-1">El impacto real de meter tu nuevo dinero:</p>
+                    <p class="text-2xl font-bold text-white mb-2" id="verdictDiff">+$0.00 extra</p>
+                    <p class="text-sm text-blue-300" id="verdictText">Calcula primero para ver el resultado.</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Utilidades ---
+        const formatMoney = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+        const colorizeText = (amount) => amount >= 0 ? 'text-emerald-400' : 'text-red-400';
+        const generateId = () => Math.random().toString(36).substr(2, 9);
+
+        // --- Estado de la App ---
+        let portfolio = JSON.parse(localStorage.getItem('simulador_cartera_v2')) || [];
+        let activeSimId = null;
+
+        // --- DOM Elements ---
+        const portfolioBody = document.getElementById('portfolioBody');
+        const emptyState = document.getElementById('emptyState');
+        const addPositionForm = document.getElementById('addPositionForm');
+        
+        // --- Lógica de Cartera ---
+        function savePortfolio() {
+            localStorage.setItem('simulador_cartera_v2', JSON.stringify(portfolio));
+            renderPortfolio();
+        }
+
+        function addPosition(e) {
+            e.preventDefault();
+            const ticker = document.getElementById('newTicker').value.trim().toUpperCase();
+            const buyPrice = parseFloat(document.getElementById('newBuyPrice').value);
+            const invested = parseFloat(document.getElementById('newInvested').value);
+
+            if (!ticker || isNaN(buyPrice) || isNaN(invested)) return;
+
+            portfolio.push({
+                id: generateId(),
+                ticker,
+                buyPrice,
+                invested,
+                currentPrice: buyPrice // Por defecto el de compra hasta que se actualice
+            });
+
+            // Limpiar formulario
+            document.getElementById('newTicker').value = '';
+            document.getElementById('newBuyPrice').value = '';
+            document.getElementById('newInvested').value = '';
+            
+            savePortfolio();
+        }
+
+        function deletePosition(id) {
+            if(confirm("¿Borrar esta posición?")) {
+                portfolio = portfolio.filter(p => p.id !== id);
+                if(activeSimId === id) deactivateSimulator();
+                savePortfolio();
+            }
+        }
+
+        function updateCurrentPrice(id, newPrice) {
+            const pos = portfolio.find(p => p.id === id);
+            if (pos) {
+                pos.currentPrice = parseFloat(newPrice) || pos.buyPrice;
+                savePortfolio();
+                // Si la posición está en el simulador, actualizar datos ocultos
+                if(activeSimId === id) {
+                    document.getElementById('simCurrentPrice').value = pos.currentPrice;
+                    calcularSimulacion();
+                }
+            }
+        }
+
+        async function fetchPriceYahoo(id, ticker, btnElement) {
+            const originalHtml = btnElement.innerHTML;
+            btnElement.innerHTML = '<span class="loader"></span>';
+            btnElement.disabled = true;
+
+            try {
+                const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d`;
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(yahooUrl)}`;
+                const response = await fetch(proxyUrl);
+                const json = await response.json();
+                const data = JSON.parse(json.contents);
+                const price = data.chart.result[0].meta.regularMarketPrice;
+                
+                if (price) {
+                    updateCurrentPrice(id, price.toFixed(2));
+                } else {
+                    alert("Precio no encontrado para " + ticker);
+                }
+            } catch (error) {
+                console.error(error);
+                alert("Error conectando con Yahoo. Escribe el precio a mano.");
+            } finally {
+                btnElement.innerHTML = originalHtml;
+                btnElement.disabled = false;
+            }
+        }
+
+        function renderPortfolio() {
+            portfolioBody.innerHTML = '';
+            let globalInv = 0, globalVal = 0;
+
+            if (portfolio.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                
+                portfolio.forEach(p => {
+                    const shares = p.invested / p.buyPrice;
+                    const currentVal = shares * p.currentPrice;
+                    const profit = currentVal - p.invested;
+                    
+                    globalInv += p.invested;
+                    globalVal += currentVal;
+
+                    const tr = document.createElement('tr');
+                    tr.className = `hover:bg-slate-800/50 transition-colors ${activeSimId === p.id ? 'bg-slate-700/50 border-l-2 border-emerald-500' : ''}`;
+                    tr.innerHTML = `
+                        <td class="px-4 py-3 font-bold text-white">${p.ticker}</td>
+                        <td class="px-4 py-3">${formatMoney(p.buyPrice)}</td>
+                        <td class="px-4 py-3">${formatMoney(p.invested)}</td>
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                $ <input type="number" step="any" class="w-20 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm text-white focus:border-blue-500" 
+                                       value="${p.currentPrice}" onchange="updateCurrentPrice('${p.id}', this.value)">
+                                <button onclick="fetchPriceYahoo('${p.id}', '${p.ticker}', this)" class="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded transition" title="Actualizar desde Yahoo">
+                                    🔄
+                                </button>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 font-medium">${formatMoney(currentVal)}</td>
+                        <td class="px-4 py-3 font-bold ${colorizeText(profit)}">${profit >= 0 ? '+' : ''}${formatMoney(profit)}</td>
+                        <td class="px-4 py-3 text-right">
+                            <button onclick="activateSimulator('${p.id}')" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded transition">Simular</button>
+                            <button onclick="deletePosition('${p.id}')" class="text-xs bg-red-900 hover:bg-red-700 text-red-200 px-2 py-1 rounded ml-1 transition" title="Borrar">✕</button>
+                        </td>
+                    `;
+                    portfolioBody.appendChild(tr);
+                });
+            }
+
+            // Actualizar resumen global
+            const globalProf = globalVal - globalInv;
+            document.getElementById('globalInvested').innerText = formatMoney(globalInv);
+            document.getElementById('globalValue').innerText = formatMoney(globalVal);
+            const globalProfitEl = document.getElementById('globalProfit');
+            globalProfitEl.innerText = (globalProf >= 0 ? '+' : '') + formatMoney(globalProf);
+            globalProfitEl.className = `font-bold ${colorizeText(globalProf)}`;
+        }
+
+        // --- Lógica del Simulador ---
+        function activateSimulator(id) {
+            const pos = portfolio.find(p => p.id === id);
+            if (!pos) return;
+            
+            activeSimId = id;
+            renderPortfolio(); // Para repintar la fila seleccionada
+
+            // Rellenar datos ocultos
+            document.getElementById('simBuyPrice').value = pos.buyPrice;
+            document.getElementById('simInvested').value = pos.invested;
+            document.getElementById('simCurrentPrice').value = pos.currentPrice;
+
+            // UI del simulador
+            const simSection = document.getElementById('simulatorSection');
+            simSection.classList.remove('opacity-50', 'pointer-events-none');
+            
+            const badge = document.getElementById('simBadge');
+            badge.innerText = pos.ticker;
+            badge.classList.remove('hidden');
+
+            // Sugerir un target price (+10% del current)
+            if(!document.getElementById('targetPrice').value) {
+                document.getElementById('targetPrice').value = (pos.currentPrice * 1.10).toFixed(2);
+            }
+
+            // Scroll suave hacia abajo
+            simSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            
+            calcularSimulacion();
+        }
+
+        function deactivateSimulator() {
+            activeSimId = null;
+            const simSection = document.getElementById('simulatorSection');
+            simSection.classList.add('opacity-50', 'pointer-events-none');
+            document.getElementById('simBadge').classList.add('hidden');
+        }
+
+        function calcularSimulacion() {
+            if(!activeSimId) return;
+
+            const buyPrice = parseFloat(document.getElementById('simBuyPrice').value);
+            const invested = parseFloat(document.getElementById('simInvested').value);
+            const currentPrice = parseFloat(document.getElementById('simCurrentPrice').value);
+            
+            const addAmount = parseFloat(document.getElementById('addAmount').value) || 0;
+            const targetPrice = parseFloat(document.getElementById('targetPrice').value);
+
+            if (!targetPrice) return;
+
+            const sharesOwned = invested / buyPrice;
+
+            // Escenario 1: Sin añadir
+            const scen1Value = sharesOwned * targetPrice;
+            const scen1Profit = scen1Value - invested;
+            
+            document.getElementById('lblTargetPrice').innerText = targetPrice;
+            document.getElementById('scen1Value').innerText = formatMoney(scen1Value);
+            document.getElementById('scen1Profit').innerText = formatMoney(scen1Profit);
+            document.getElementById('scen1Profit').className = `font-bold ${colorizeText(scen1Profit)}`;
+
+            // Escenario 2: Añadiendo
+            const newShares = addAmount / currentPrice;
+            const totalShares = sharesOwned + newShares;
+            const totalInvested = invested + addAmount;
+            const newAvgPrice = totalInvested / totalShares;
+            
+            const scen2Value = totalShares * targetPrice;
+            const scen2Profit = scen2Value - totalInvested;
+
+            document.getElementById('lblAddAmount').innerText = addAmount;
+            document.getElementById('scen2AvgPrice').innerText = formatMoney(newAvgPrice);
+            document.getElementById('scen2Value').innerText = formatMoney(scen2Value);
+            document.getElementById('scen2Profit').innerText = formatMoney(scen2Profit);
+            document.getElementById('scen2Profit').className = `font-bold ${colorizeText(scen2Profit)}`;
+
+            // Veredicto
+            const extraProfit = scen2Profit - scen1Profit;
+            const returnOnNewCapital = addAmount > 0 ? (extraProfit / addAmount) * 100 : 0;
+            
+            const verdictDiff = document.getElementById('verdictDiff');
+            verdictDiff.innerText = (extraProfit >= 0 ? '+' : '') + formatMoney(extraProfit) + ' extra';
+            verdictDiff.className = `text-2xl font-bold mb-2 ${colorizeText(extraProfit)}`;
+
+            document.getElementById('verdictText').innerHTML = `
+                Al invertir <strong>${formatMoney(addAmount)}</strong> a precio actual ($${currentPrice}), 
+                generas <strong>${formatMoney(extraProfit)}</strong> extra respecto a no hacer nada 
+                (un ${returnOnNewCapital.toFixed(2)}% sobre tu nuevo capital).
+            `;
+        }
+
+        // --- Event Listeners ---
+        addPositionForm.addEventListener('submit', addPosition);
+        document.getElementById('addAmount').addEventListener('input', calcularSimulacion);
+        document.getElementById('targetPrice').addEventListener('input', calcularSimulacion);
+
+        // --- Init ---
+        renderPortfolio();
+
+    </script>
+</body>
+</html>
